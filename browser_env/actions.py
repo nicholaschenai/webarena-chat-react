@@ -41,7 +41,7 @@ from browser_env.constants import (
     RolesType,
 )
 from browser_env.processors import ObservationProcessor
-
+from browser_env.env_config import URL_MAPPINGS
 
 class ParsedPlaywrightCode(TypedDict):
     function_name: str
@@ -557,6 +557,18 @@ def create_go_forward_action() -> Action:
 def create_goto_url_action(url: str) -> Action:
     """Return a valid action object with type GOTO_URL."""
     action = create_none_action()
+
+    # safeguard to whitelist websites
+    whitelisted_url = False
+    for i, j in URL_MAPPINGS.items():
+        if url.startswith(i) or url.startswith(j):
+            whitelisted_url = True
+            break
+    if 'docs.gitlab.com' in url or 'experienceleague.adobe.com' in url:
+        whitelisted_url = True
+    if not whitelisted_url:
+        raise ActionParsingError(f"Invalid goto action, url is not in whitelist")
+
     action.update(
         {
             "action_type": ActionTypes.GOTO_URL,

@@ -16,6 +16,7 @@ from agent import (
     PromptAgent,
     TeacherForcingAgent,
     construct_agent,
+    ReactPromptAgent,
 )
 from agent.prompts import *
 from browser_env import (
@@ -32,6 +33,9 @@ from browser_env.helper_functions import (
     get_action_description,
 )
 from evaluation_harness import evaluator_router
+
+# my modifications
+import pandas as pd
 
 LOG_FOLDER = "log_files"
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
@@ -204,11 +208,20 @@ def early_stop(
 @beartype
 def test(
     args: argparse.Namespace,
-    agent: Agent | PromptAgent | TeacherForcingAgent,
+    agent: Agent | PromptAgent | TeacherForcingAgent | ReactPromptAgent,
     config_file_list: list[str],
 ) -> None:
     scores = []
     max_steps = args.max_steps
+
+    # my mods
+    RESULT_FILE_PATH = f"{args.result_dir}/logged_results.csv"
+    if os.path.exists(RESULT_FILE_PATH):
+        print('results file exists, resuming from there')
+        df = pd.read_csv(RESULT_FILE_PATH, index_col=0)
+    else:
+        print('create new results file')
+        df = pd.DataFrame(index=range(812), columns=['score'])
 
     early_stop_thresholds = {
         "parsing_failure": args.parsing_failure_th,
@@ -273,7 +286,7 @@ def test(
                     state_info["info"]["observation_metadata"],
                     action_set_tag=args.action_set_tag,
                     prompt_constructor=agent.prompt_constructor
-                    if isinstance(agent, PromptAgent)
+                    if (isinstance(agent, PromptAgent) or isinstance(agent, ReactPromptAgent))
                     else None,
                 )
                 render_helper.render(
@@ -303,6 +316,10 @@ def test(
 
             scores.append(score)
 
+            df.score[task_id] = score
+            print(f'df stats: len: {len(df.index)} avg: {df.score.mean()} number of nan: {df.score.isnull().sum()}')
+            df.to_csv(RESULT_FILE_PATH)
+
             if score == 1:
                 logger.info(f"[Result] (PASS) {config_file}")
             else:
@@ -329,7 +346,10 @@ def test(
 
     env.close()
     logger.info(f"Average score: {sum(scores) / len(scores)}")
-
+    has_gitlab_df = pd.read_csv('has_gitlab.csv', index_col=0)
+    df = df[~has_gitlab_df.has_gitlab]
+    print('after filtering')
+    print(f'df stats: len: {len(df.index)} avg: {df.score.mean()} number of nan: {df.score.isnull().sum()}')
 
 def prepare(args: argparse.Namespace) -> None:
     # convert prompt python files to json
@@ -390,7 +410,7 @@ if __name__ == "__main__":
         test_file_list.append(f"config_files/{i}.json")
     test_file_list = get_unfinished(test_file_list, args.result_dir)
     print(f"Total {len(test_file_list)} tasks left")
-    args.render = True
+    # args.render = True
     args.render_screenshot = True
     args.save_trace_enabled = True
 

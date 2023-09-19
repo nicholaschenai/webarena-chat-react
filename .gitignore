@@ -156,3 +156,8 @@ config_files/*7.json
 config_files/*8.json
 config_files/*9.json
 config_files/test.json
+
+# my stuff
+outputs/
+test_cache/
+.idea/
